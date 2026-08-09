@@ -15,15 +15,11 @@ This file is the chronological build log and choices made during this build, in 
 - Chose Claude Fable 5
 - Rationale: current frontier model, strongest tool-calling reliability; model choice itself is a product-strategy question for Arcade's ICP — noted for the write-up
 
-
-
 ## 2026-08-03 — Session: env setup part 1
 
 - Concept locked (Meridian incident triage); catalog recon done → findings.md
 - meridian-platform seeded: 3 commits (16→8 suspect on top), first 6 issues, dup closed w/ root cause
 - Next: corpus →10, Slack, PagerDuty, second account, Arcade
-
-
 
 ## Personas & accounts (disclosure)
 
@@ -31,8 +27,6 @@ This file is the chronological build log and choices made during this build, in 
 - Primary account plays Priya (later Amara); secondary plays Jordan
 - Marco & Katherine are names only (Marco = PagerDuty rotation; Katherine = intended approver in the enterprise pattern)
 - Today's gate self-approves; routing approval to a separate person/policy system is the gap this build documents
-
-
 
 ## 2026-08-08 — Session: env setup part 2
 
@@ -43,4 +37,9 @@ This file is the chronological build log and choices made during this build, in 
 ## 2026-08-08 — Decision: use cases finalized
 - UC1 incident triage (platform team dogfood), UC2 client servicing (Amara)
 - Live incident carries a claims-intake hotfix in the blocked deploy — links UC1 to ClaimsCore honestly
+
+## 2026-08-08 pm — Session: playground verification + pre-build check
+- GitHub + Slack connected and verified from the playground; PagerDuty fails silently — parked, on-call lookup stubbed
+- Pre-build check passed (UC1 duplicate detection works)
+- Next: PagerDuty retry (5-min cap), then UC1 happy path in Cursor
 
