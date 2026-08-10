@@ -55,7 +55,7 @@ Product observations from building on Arcade. These feed the strategy doc.
 - Tried: a new playground chat, re-authorizing three times, logging out and back in, a fresh consent flow. The billing page shows no connection limit (quotas barely touched), and the "user challenges" counter did increment — so Arcade saw the attempts
 - My first self-debugging theory (I used a different email domain for PagerDuty than for the other tools) turned out to be wrong — but nothing in the UI told me that. Silent failures make users invent explanations
 - Parked for now: the agent will use a hard-coded on-call answer until this resolves; retrying next session. If it persists, I'll open a support ticket
-
+- Day-2 retry (fresh session, new chat): identical outcome — consent completes, redirect clean, no connection registered, no error. Contrast with the GitHub failure is instructive: GitHub broke provider-side while Arcade showed a healthy connection; PagerDuty completes provider-side and dies Arcade-side. Same silent-dead-end symptom, opposite broken layers — and nothing tells the user which. Escalating to support; the response becomes part of the evaluation record
 
 
 ## 2026-08-08 — Pre-build check (UC1): can GitHub search actually find the duplicate incident? (playground, model-driven search)
@@ -96,15 +96,11 @@ Product observations from building on Arcade. These feed the strategy doc.
 
 ## 2026-08-09 — Two writes, two outcomes: the Slack success and the GitHub dead end
 
-
-
 ### What happened
 
 - The pipeline's approved run executes two writes. Slack: SendMessage lacked a posting scope from the earlier read-only consent — mid-run, the SDK printed an auth link, waited, and resumed after consent; the message posted as "Priya Raman," indistinguishable from the human typing, no agent marker in the system of record
 - GitHub: CreateIssueComment failed with a raw upstream 403. Revoking the connection and re-consenting fresh completed "successfully" — the SDK challenge now fires and resumes, matching Slack's flow — and the write still 403s identically
 - Overnight token refresh, for the record: all GitHub/Slack reads worked first-try after ~12h idle, no re-auth
-
-
 
 ### Why: GitHub's two-step authorization model
 
@@ -113,13 +109,9 @@ Product observations from building on Arcade. These feed the strategy doc.
 - No self-serve fix exists: the app page offers no Install button, the app is absent from GitHub's marketplace, and no Arcade surface (dashboard, error, docs for the managed app) links an installation flow. Arcade's own BYOC guide states installation is required ("you need to install it to make it functional") — the managed default app has no equivalent step anywhere
 - Reads only appeared to work because this repo is public: they required no grant at all. On a private repo, the missing installation would have blocked the very first read — surfacing the problem at setup instead of at the first consequential write. Public-repo pilots are the treacherous case: everything demos until the moment it matters
 
-
-
 ### Sim vs. enterprise
 
 - Here, employee and repo-owner are the same person (personal account). At a real F2000, repos live in a GitHub organization: the installation is a one-time org-admin act, and an engineer hitting this 403 is seeing "the admin hasn't approved the app for this repo" — with no way to self-serve past it, and an error that says none of this
-
-
 
 ### What it teaches
 
@@ -127,26 +119,27 @@ Product observations from building on Arcade. These feed the strategy doc.
 - The pattern generalizes: enterprise authorization is multi-party. The user's yes is never the whole story (GitHub: installation; Slack: workspace app approval; Google/Microsoft: admin consent). A platform pitching unified auth is pitching the absorption of exactly this heterogeneity — and this incident measures where absorption currently ends
 - Practical corollary for any agent pilot: verify the write path on day one. Successful reads prove little; the first write is the real authorization test
 
-
-
 ### Status
 
 - GitHub comment write: documented-as-blocked; support ticket to Arcade is the next step and its handling becomes part of the evaluation record. Slack write: fully working, behind the gate
 
-
+### Addendum (2026-08-10, after PM-suggested playground test)
+- Same write attempted from the playground: identical 403. The dead end is surface-independent — SDK and playground share the fate
+- Sharpening contrast from the same session: STARRING a repo from the playground succeeds. "View and manage your starred repositories" was explicitly in the user-consent scope list; issue comments never were. So the boundary is now precisely drawn: writes WITHIN the user-consent scopes work without installation; writes beyond them 403 — exactly what the two-grant model predicts
+- Bonus observation: the playground model's own explanation of the 403 was confidently wrong — it claimed the account lacks repo write access (the account owns the repo) and suggested "a GitHub token with repo scope" (not applicable to the managed flow). The layer that interprets errors for users invents plausible-but-incorrect remediation, which makes the silent dead end actively misleading rather than just unexplained
 
 ## 2026-08-09 — Confirmed: no tool lists a repository's commit history
-
 - Checked all 43 GitHub tools. Two touch commits at all: ListPullRequestCommits (commits inside one pull request) and GetUserRecentActivity (my own recent activity, across repos). ListRepositoryActivities sounds right but returns no commit messages, authors, or dates
 - What this means in practice: there is no single call that answers "what changed in this repo recently?" Teams that merge everything through pull requests can piece the answer together — list recent PRs, keep the merged ones, fetch each one's commits — which works, but turns one question into several calls plus filtering logic
 - What stays invisible: changes that never went through a PR — urgent hotfixes, admin pushes, bot commits, config repos with looser rules. These exist in most real organizations, and they're often exactly the changes behind an incident
 - Our agent's workaround: read the current contents of the known config files and let the model compare them against what past incidents say a healthy state looked like. This can say "this setting looks wrong given history" — it cannot say "this change, made on this date, caused it." The file paths are hard-coded and marked as a simplification in the code
 - Broader point: 43 tools and an "Optimized" badge read like full coverage, but this gap only shows up when a workflow needs it. Counting tools is not the same as covering workflows
 
-
+## 2026-08-09 — The fixed step 4: config-state inference works, and names its own limits
+- With current config + incident history, the model produced genuinely competent triage: ranked autoscale.yaml as primary suspect with mechanism (pool exhaustion signature), flagged scale_down as contributing, explicitly cleared the unrelated group-benefits file ("not manufacturing a connection"), noticed the absent claims workflow YAML as a gap, and closed with a "What I Am Not Asserting" section — unprompted epistemic honesty, now a stable trait across runs
+- The irony that makes the toolkit gap concrete: the analysis's own top recommendation — in consecutive runs, in both drafts — is "check the git log for autoscale.yaml." The agent's first suggested action is precisely the capability the toolkit doesn't offer. The gap isn't theoretical; the agent itself asks for the missing tool
 
 ## 2026-08-09 — Inference needs a baseline, and the baseline lives in comments
-
 - With the regression present (max_runners now 8), config-state inference still couldn't call it: the model correctly said the values look "plausible but tight" and asked for git history — it had no way to know 8 used to be 16. Detecting a regression from current state alone is structurally impossible without a known-good reference
 - The reference exists in our corpus: issue #1's resolution comment records that capacity was raised. But the agent reads issue BODIES (ListIssues); resolution comments are a separate object it never fetches. The most valuable sentence in incident history — how it was fixed last time — is invisible to the implementation as built
 - Model behavior stayed exemplary: named both plausible mechanisms, refused to blame the YAML without evidence, and for the third run straight listed "check the git log" as its top recommended action — the agent keeps asking for precisely the tool the toolkit lacks
@@ -157,9 +150,22 @@ Product observations from building on Arcade. These feed the strategy doc.
 - Workaround shipped: the agent identifies the closest past incident, prints a notice that its resolution comments are unreachable, and feeds its issue body verbatim into the analysis as the fullest available record
 - Pattern across the day now visible: three adjacent gaps in one workflow — no repo commit history, activity events without metadata, comments writable but not readable. Each alone is a nit; together they mean the toolkit supports acting on the present but not learning from the past, which is half of what incident triage is
 
-## 2026-08-10 — The one-Meridian-rule probe: roles don't exist yet, by the product's own admission
+## 2026-08-10 — The approval log that wasn't: ordering matters
+- Our gate logs the approval AFTER executing both writes. Both approved runs crashed between the writes (Slack succeeded, GitHub 403'd) — so two real, human-approved, executed Slack posts have no approval record at all. The audit trail has a gap exactly where an auditor would look first: the runs where something went wrong
+- The design lesson, now demonstrated rather than asserted: record the approval decision BEFORE executing, then record each action's outcome. An approval log that depends on everything succeeding documents only the boring runs
+- Fix shipped same night: decision line written pre-execution; one outcome line per action (sent/failed + error kind); declines logged too — a human saying no is itself an audit event. Side effect accepted deliberately: the two writes are now independent, so one failing no longer prevents the other — correct semantics for a gate that approved both
+
+## 2026-08-10 — The one-Meridian-rule probe: roles don't exist yet
 - Target rule (the AI Platform Lead's requirement, verbatim): "engineers on the incident-response rotation may post to Slack through agents; read-only engineers may not"
 - Search of the dashboard: Members governs project collaborators (dashboard administration), not end users — Priya and Jordan aren't members at all, they're connected identities under Connections. No roles column, no permissions surface
 - The Invite Member dialog states it directly: invitees get "full access to this project," with a sign-up link for "advanced roles" in preview. So: one access level today, role model acknowledged as future work by the product itself
 - Verdict: the rule as stated cannot be expressed. The model stops at: no roles exist. The nearest available levers are per-agent tool selection (applies to every user of the agent equally) and per-user provider grants (per person, not per class) — a rule that binds a CLASS of users to a TOOL permission has no home between them
 - Why it matters for the ICP: this is the first sentence an enterprise admin tries to configure. "Advanced roles in preview" says Arcade knows; the probe documents what the gap feels like from the buyer's chair today
+
+
+## 2026-08-10 — Audit-depth probe: the log records the dashboard, not the runs
+- Audit Logs, checked after a weekend of activity, contains one entry: the API key's creation two days ago. Absent: every tool execution (~20 across playground and SDK), both Slack writes, the OAuth challenges and consents, the GitHub connection revoke, and the repeated failed PagerDuty registration attempts
+- Read against a security reviewer's questions — who did what, when, through which agent, who approved, what failed — the answer to all of them is: not here. The log covers dashboard administration events, not agent activity
+- Sharpest gap given the product's own story: attribution is the platform's foundation claim ("know who did what and when"), and the per-call delegation machinery clearly knows — but what it knows isn't surfaced anywhere an auditor can read. The data plane and the audit surface are different products today
+- Also notable: the failed PagerDuty registrations left no trace here either — the silent failure is silent all the way down
+- Probe verdict: confirmed gap. Our approvals.log (agent-side) currently holds more governance-relevant record than the platform's audit log — and we had to build it
