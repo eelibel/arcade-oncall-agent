@@ -35,6 +35,8 @@ The happy path shows the agent working; validation is the team deliberately poki
 - **One Meridian rule.** Katherine's requirement, verbatim: "engineers on the incident-response rotation may post to Slack through agents; read-only engineers may not." The team's admin tries to make the dashboard say that sentence. Steps, in order: (1) find the Users / Teams / Roles area; (2) create two roles — `incident-responders` containing Priya, `engineers-readonly` containing Jordan; (3) look for any way to attach *tool access* to a role — specifically, allow `Slack_SendMessage` for the first role and deny it for the second; (4) whatever was configurable, verify it empirically: Jordan attempts the Slack post again — did anything behave differently than before the roles existed? Capture: a screenshot at each step, and the closing sentence in this form: "The rule as stated can / cannot be expressed. The model stops at: ___" — for example, "roles exist but govern dashboard administration, not tool access." If step 1 finds no roles area at all, that is the stopping point.
 - **A hook.** A hook is a small piece of our code that Arcade runs before each tool call — the docs claim pre- and post-call hooks exist. Sixty minutes total, then stop regardless. Minutes 0–30: search the docs for how to register one on our plan (config file, dashboard, SDK). If it's gated to a higher tier, screenshot the gate — that's the result, done. If available: write ~15 lines that do two things on every call: append a line to `events.log` (timestamp, user, tool, argument summary), and reject any `Slack_SendMessage` whose text contains `@channel` — Meridian's plausible house rule that agents never mass-ping. Then two runs: triage with a draft deliberately containing `@channel` (expect: blocked, with our rejection message), and a clean run (expect: passes). Capture: the hook code, both outcomes, and `events.log` showing every call from both runs.
 
+
+
 ## Use case 2 — Client servicing / meeting prep (business unit)
 
 Amara, a group-benefits account manager, preps for a client renewal from her own AI assistant on the desktop — the interactive surface, no pipeline involved. It reads her Calendar, Gmail, and Docs, drafts the prep brief, sends the follow-up summary to the client, and when the client calls about a claim, answers live via ClaimsCore. Same governed path as use case 1, different buyer mode: productivity agents for business users, reaching internal systems safely, every access attributed to Amara personally.
@@ -43,6 +45,8 @@ Amara, a group-benefits account manager, preps for a client renewal from her own
 
 - **The rules surface.** Same goal as the hook — stop a bad call before it executes — but through the product's own no-code policy feature (Contextual Access) instead of our code. This runs *before* the deliberate failure, because the failure is read against it. Katherine's rule for business users: "agent-drafted outbound email must not contain CONFIDENTIAL." The admin's steps: (1) find the Contextual Access / policies area in the dashboard; (2) attempt to create a rule targeting the Gmail send tool that inspects the call's *content* — body text or attachment name — for the word CONFIDENTIAL; (3) record two facts separately: does the rule-building UI exist on our tier at all, and can a rule reference call content, or only allow/deny a tool wholesale; (4) if a rule saved: Amara sends her follow-up with "CONFIDENTIAL" in the attachment name — does it block? Capture: screenshots of the policy UI (or its absence), the rule as saved, the send outcome.
 - **The deliberate failure.** Amara's assistant drafts the client follow-up with a file attached — every grant legitimate — and sends it. Which file depends on the previous probe: if no rule could be created, the file is plainly marked CONFIDENTIAL in its name; if a rule caught the literal word, the file's name is innocent and only its contents are sensitive — demonstrating that rules catch what can be named, not what things mean. Either way the send completes and nothing intervenes. One screenshot, one paragraph. This is the line between what today's controls catch and what they don't, shown rather than claimed.
+
+
 
 ## One check across everything
 
@@ -60,4 +64,8 @@ Last, the team exports whatever the platform's dashboard offers about all of the
 | Amara Diallo   | Group-benefits account manager            | Use case 2's persona.                                                                                |
 
 
-All personas are fictional. Two real test accounts run everything: the primary account plays Priya and Amara; the secondary plays Jordan. Marco and Katherine are names only.
+All personas are fictional, played by two real test accounts:
+
+- **Primary account** (GitHub: eelibel): plays Priya and, later, Amara. Because this build has no third account for "the reporting engineer," the primary account also files the incident reports and authored the repository's commits — so issue authorship, commit history, and Priya's actions all display the same GitHub identity. A production rollout would not have this collapse.
+- **Secondary account** (GitHub: [Jordan's username]): plays Jordan Lee. Marco and Katherine are names only — Marco exists in the PagerDuty rotation, Katherine as the named intended approver in the target pattern.
+

@@ -7,7 +7,9 @@ is filed; here it is started manually with one command:
     python agent/triage_agent.py <issue_number>
 
 The agent reads the issue, mines past incidents (closed ones included),
-inspects recent repository activity for suspect commits, checks who is on
+inspects the current deploy/runner configuration for likely regressions
+(the GitHub toolkit has no repo-level commit listing, so cause analysis
+works from current config state plus incident history), checks who is on
 call and what claims are impacted, then drafts a Slack update for #incidents
 and a GitHub comment. NOTHING is written anywhere until a human approves at
 the single gate: the agent proposes, the human approves, then actions execute.
@@ -94,6 +96,13 @@ def compact(data, limit=12000):
     return text if len(text) <= limit else text[:limit] + " ...[truncated]"
 
 
+def log_event(record):
+    """Append one timestamped JSON line to the audit log."""
+    record = {"timestamp": datetime.now(timezone.utc).isoformat(), **record}
+    with open(APPROVALS_LOG, "a", encoding="utf-8") as log:
+        log.write(json.dumps(record) + "\n")
+
+
 # --- Stubs (integrations pending) ---------------------------------------------
 
 
@@ -145,43 +154,79 @@ def main():
         "incidents by relevance to the new one. For each, give the issue "
         "number, title, state, a one-line reason for its rank, and — if it "
         "was closed — how it appears to have been resolved. Finish by naming "
-        "the single closest past incident."
+        "the single closest past incident, then reply with a JSON object on "
+        'its own line at the end: {"closest_issue_number": <number>}.'
     )
     print("      --- Similar-incident ranking ---")
     print(similar_analysis)
 
-    # 4. Recent repository activity — suspect commits.
-    print("[4/9] Pulling recent activity via Github.ListRepositoryActivities ...")
-    activity = execute_tool(
-        "Github.ListRepositoryActivities", {**repo, "per_page": 30, "direction": "desc"}
+    # The toolkit can WRITE issue comments (CreateIssueComment) but has no
+    # tool to READ them, so the resolution discussion in a closed issue's
+    # comments is unreachable; the issue body verbatim is the best available.
+    closest_issue = None
+    closest_number = None
+    try:
+        closest_number = int(extract_json(similar_analysis)["closest_issue_number"])
+    except (ValueError, KeyError, TypeError, json.JSONDecodeError):
+        print("      (could not identify a closest past incident; continuing)")
+    if closest_number is not None and closest_number != issue_number:
+        print(
+            "      note: issue-comment reading unavailable in toolkit — "
+            "resolution comments on the closest incident are unreachable; "
+            "using its issue body verbatim"
+        )
+        print(f"      Fetching closest incident #{closest_number} via Github.GetIssue ...")
+        closest_issue = execute_tool(
+            "Github.GetIssue", {**repo, "issue_number": closest_number}
+        )
+
+    # 4. Probable-cause analysis from current config state.
+    #    The GitHub toolkit exposes no repo-level commit listing
+    #    (ListRepositoryActivities returns only event IDs and actors, and
+    #    ListPullRequestCommits is per-PR), so instead of commit archaeology
+    #    the agent reads the current deploy/runner config and reasons about
+    #    likely regressions from current state + incident history.
+    print("[4/9] Analyzing current config state for likely regressions ...")
+    print(
+        "      note: repo-level commit listing unavailable in toolkit — "
+        "inferring from current config state"
     )
-    print("      Flagging suspect commits with the model ...")
-    commit_reply = ask_model(
+    # SIMPLIFICATION: config paths are known here; a real deployment would
+    # walk the repo tree.
+    config_paths = [
+        "infra/runners/autoscale.yaml",
+        "infra/pipelines/group-benefits-deploy.yaml",
+    ]
+    config_files = {}
+    for path in config_paths:
+        print(f"      Fetching {path} via Github.GetFileContents ...")
+        try:
+            config_files[path] = execute_tool(
+                "Github.GetFileContents", {**repo, "path": path}
+            )
+        except RuntimeError as err:
+            config_files[path] = f"(fetch failed: {err})"
+
+    print("      Reasoning about likely regressions with the model ...")
+    cause_analysis = ask_model(
         "New incident:\n\n"
         f"{compact(issue)}\n\n"
-        "Recent repository activity (pushes, branches, actors):\n\n"
-        f"{compact(activity)}\n\n"
-        "Flag any commit or push that plausibly relates to the symptom, with "
-        "a short reason each; say so plainly if none do. Then reply with a "
-        "JSON object on its own line at the end: "
-        '{"files_to_inspect": ["path", ...]} listing up to 2 repository file '
-        "paths whose contents would help confirm a suspect (empty list if none)."
+        "Current contents of the deploy/runner configuration files:\n\n"
+        f"{compact(config_files)}\n\n"
+        "Summaries of similar past incidents and their resolutions:\n\n"
+        f"{similar_analysis}\n\n"
+        "Closest past incident, body verbatim (its resolution comments are "
+        "not readable through the toolkit, so this is the fullest available "
+        "record of how it was resolved):\n\n"
+        f"{compact(closest_issue) if closest_issue else '(none identified)'}\n\n"
+        "Reason about the likely regression: which current config values or "
+        "recent-looking changes plausibly explain the symptom, especially "
+        "where the past incidents suggest what a healthy state looked like? "
+        "Name the specific file and setting for each suspect, with a short "
+        "reason; say so plainly if the configs look unrelated to the symptom."
     )
-    print("      --- Suspect-commit analysis ---")
-    print(commit_reply)
-
-    file_excerpts = {}
-    try:
-        for path in extract_json(commit_reply).get("files_to_inspect", [])[:2]:
-            print(f"      Inspecting {path} via Github.GetFileContents ...")
-            try:
-                file_excerpts[path] = execute_tool(
-                    "Github.GetFileContents", {**repo, "path": path}
-                )
-            except RuntimeError as err:
-                file_excerpts[path] = f"(fetch failed: {err})"
-    except (ValueError, json.JSONDecodeError):
-        pass  # no inspectable files named; proceed without excerpts
+    print("      --- Probable-cause analysis ---")
+    print(cause_analysis)
 
     # 5. On-call lookup (stub).
     print("[5/9] Looking up on-call rotation (stub — PagerDuty pending) ...")
@@ -199,13 +244,14 @@ def main():
         "Compose the incident-triage output from this assembled context.\n\n"
         f"TRIGGERING ISSUE (#{issue_number}):\n{compact(issue)}\n\n"
         f"SIMILAR PAST INCIDENTS (ranked):\n{similar_analysis}\n\n"
-        f"SUSPECT COMMITS:\n{commit_reply}\n\n"
-        f"INSPECTED FILES:\n{compact(file_excerpts, 6000)}\n\n"
+        f"PROBABLE-CAUSE ANALYSIS (from current config state):\n{cause_analysis}\n\n"
+        f"CURRENT CONFIG FILES:\n{compact(config_files, 6000)}\n\n"
         f"ON CALL: {oncall}\n\n"
         f"CLAIM IMPACT: {claim_impact}\n\n"
         "Return ONLY a JSON object with two string fields:\n"
         '- "slack_message": the update for #incidents, containing in order: '
-        "incident summary; probable cause with the suspect commit reference; "
+        "incident summary; probable cause naming the implicated config file "
+        "and setting (or commit, if one is identifiable from history); "
         "closest past incident and how it was resolved; one business-impact "
         "line from the claim data; suggested page (the on-call person). "
         "Plain text with short labeled lines, no markdown headers.\n"
@@ -230,35 +276,57 @@ def main():
     print("=" * 69)
     answer = input("Post to #incidents and comment on the issue? (y/n) ").strip().lower()
 
-    if answer != "y":
-        # 10. Declined: exit without writing anything.
-        print("[9/9] Not approved. Exiting without posting or logging.")
-        sys.exit(0)
-
-    # 9. Approved: execute both writes, then log the approval event.
-    print(f"[9/9] Approved. Posting to #{SLACK_CHANNEL} via Slack.SendMessage ...")
-    execute_tool(
-        "Slack.SendMessage", {"channel_name": SLACK_CHANNEL, "message": slack_draft}
-    )
-    print("      Slack message sent.")
-
-    print("      Commenting on the issue via Github.CreateIssueComment ...")
-    execute_tool(
-        "Github.CreateIssueComment",
-        {**repo, "issue_number": issue_number, "body": comment_draft},
-    )
-    print("      Issue comment posted.")
-
-    # The hash proves exactly what was approved; the text keeps it readable.
-    record = {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
+    # The decision record: the hash proves exactly what was approved (or
+    # declined); the text keeps it readable.
+    decision_record = {
         "approver": ARCADE_USER_ID,
         "draft_sha256": hashlib.sha256(draft_text.encode("utf-8")).hexdigest(),
         "draft_text": draft_text,
     }
-    with open(APPROVALS_LOG, "a", encoding="utf-8") as log:
-        log.write(json.dumps(record) + "\n")
-    print(f"      Approval logged to {APPROVALS_LOG.name}.")
+
+    if answer != "y":
+        # 10. Declined: an audit event too — log it, execute nothing.
+        log_event({**decision_record, "decision": "declined", "note": "nothing executed"})
+        print(f"[9/9] Not approved. Decline logged to {APPROVALS_LOG.name}; nothing executed.")
+        sys.exit(0)
+
+    # 9. Approved: record the approval BEFORE any tool executes, so a crash
+    #    mid-write can never lose the fact that approval was given.
+    log_event({**decision_record, "decision": "approved"})
+    print(f"[9/9] Approved. Approval logged to {APPROVALS_LOG.name}.")
+
+    # Each write is attempted and its outcome logged independently: one
+    # failing must not hide the outcome of the other.
+    actions = [
+        (
+            "slack_post",
+            f"Posting to #{SLACK_CHANNEL} via Slack.SendMessage ...",
+            "Slack.SendMessage",
+            {"channel_name": SLACK_CHANNEL, "message": slack_draft},
+        ),
+        (
+            "github_comment",
+            "Commenting on the issue via Github.CreateIssueComment ...",
+            "Github.CreateIssueComment",
+            {**repo, "issue_number": issue_number, "body": comment_draft},
+        ),
+    ]
+    failures = 0
+    for action, banner, tool_name, tool_input in actions:
+        print(f"      {banner}")
+        try:
+            execute_tool(tool_name, tool_input)
+            log_event({"action": action, "outcome": "sent"})
+            print(f"      {action}: sent.")
+        except Exception as err:
+            failures += 1
+            error_kind = f"{type(err).__name__}: {str(err)[:300]}"
+            log_event({"action": action, "outcome": "failed", "error_kind": error_kind})
+            print(f"      {action}: FAILED — {error_kind}")
+
+    if failures:
+        print(f"Done with {failures} failed action(s); see {APPROVALS_LOG.name}.")
+        sys.exit(1)
     print("Done.")
 
 

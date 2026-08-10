@@ -12,18 +12,15 @@ This file is the chronological build log and choices made during this build, in 
 
 ## 2026-07-30 — Model selection
 
-- Chose Claude Fable 5
-- Rationale: current frontier model, strongest tool-calling reliability; model choice itself is a product-strategy question for Arcade's ICP — noted for the write-up
-
-
+- Fable writes the code (Cursor) - rationale: current frontier model, strongest tool-calling reliability; model choice itself is a product-strategy question for Arcade's ICP — noted for the write-up
+- claude-sonnet-4-6 runs the agent (Anthropic API)
+- Arcade's playground uses its own undisclosed model — playground results and agent results aren't strictly comparable
 
 ## 2026-08-03 — Session: env setup part 1
 
 - Concept locked (Meridian incident triage); catalog recon done → findings.md
 - meridian-platform seeded: 3 commits (16→8 suspect on top), first 6 issues, dup closed w/ root cause
 - Next: corpus →10, Slack, PagerDuty, second account, Arcade
-
-
 
 ## Personas & accounts (disclosure)
 
@@ -32,15 +29,11 @@ This file is the chronological build log and choices made during this build, in 
 - Marco & Katherine are names only (Marco = PagerDuty rotation; Katherine = intended approver in the enterprise pattern)
 - Today's gate self-approves; routing approval to a separate person/policy system is the gap this build documents
 
-
-
 ## 2026-08-08 — Session: env setup part 2
 
 - 10 issues live (IdP refs → Okta); Slack #incidents up; PagerDuty schedule verified (Priya→Marco 6pm); API key funded
 - Arcade: no per-app connect step — auth happens at first tool call. Playground test pending
 - Next: verify 3 toolkits, risk test 1, Spine 1
-
-
 
 ## 2026-08-08 — Decision: use cases finalized
 

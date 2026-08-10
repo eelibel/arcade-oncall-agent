@@ -29,3 +29,14 @@ Prompt: what I asked (verbatim if short, essence if long) Result: what came back
 **Prompt:** Fable probed all 6 tools' parameter schemas via arcadepy before writing the agent.
 **Result:** Real param names captured (state is optional string → must pass "all"; SendMessage takes channel_name). Two quirks: bare load_dotenv() crashes under heredoc (dotenv bug — explicit ".env" path fixed it); venv landed on python 3.9.
 **Outcome:** worked — code written against verified schemas, not guesses. agent/triage_agent.py exists; gate verified by eye (both drafts shown, writes only after y, sha256 approval log).
+
+## [session 3] — step 4 rebuilt twice, two toolkit gaps confirmed
+
+**Prompt:** Fix suspect-commit analysis (activities tool has no metadata) → introspect for a commits tool → none exists (43 checked); fallback to config-state inference. Then: model can't detect regression without baseline → introspect for comment reading → write-only. Fallback: closest incident's body verbatim + printed notices.
+**Result:** Both introspections definitive; both fallbacks shipped with SIMPLIFICATION comments; compile clean. Fable's introspect-before-code habit produced two evidence-grade findings.
+**Outcome:** worked — and the failures were the deliverable.
+
+## [session 3b] — approvals.log ordering fix
+**Prompt:** Record the approval BEFORE executing (the two approved runs left zero trace — crash between writes ate the log). Per-action outcome lines; declines logged too.
+**Result:** Decision line written pre-execution; each write in its own try/except with outcome + error_kind; n now logs a decline instead of exiting traceless. Side effect accepted: writes are now independent — one failing no longer prevents the other.
+**Outcome:** compile-clean; validation on next live run.
