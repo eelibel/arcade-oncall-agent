@@ -4,7 +4,7 @@
 Pipeline entry point: in production a GitHub webhook fires this when an issue
 is filed; here it is started manually with one command:
 
-    python agent/triage_agent.py <issue_number>
+    python agent/triage_agent.py <issue_number> [--user <arcade_user_id>]
 
 The agent reads the issue, mines past incidents (closed ones included),
 inspects the current deploy/runner configuration for likely regressions
@@ -18,6 +18,7 @@ Anthropic (claude-sonnet-4-6) is the reasoning brain; every tool call runs
 through Arcade under the on-call engineer's identity.
 """
 
+import argparse
 import hashlib
 import json
 import os
@@ -34,7 +35,10 @@ from dotenv import load_dotenv
 
 load_dotenv()  # .env at the repo root
 
-ARCADE_USER_ID = "elisa.bellagamba@gmail.com"
+# Must be a real Arcade account: persona user_ids fail Arcade's user
+# verification. Overridable via the --user flag.
+DEFAULT_USER_ID = "elisa.bellagamba@gmail.com"
+ARCADE_USER_ID = DEFAULT_USER_ID
 REPO_OWNER = "eelibel"
 REPO_NAME = "meridian-platform"
 SLACK_CHANNEL = "incidents"
@@ -103,7 +107,7 @@ def log_event(record):
         log.write(json.dumps(record) + "\n")
 
 
-# --- Stubs (integrations pending) ---------------------------------------------
+# --- Lookups (on-call still stubbed; PagerDuty pending) ------------------------
 
 
 def get_oncall():
@@ -113,22 +117,38 @@ def get_oncall():
 
 
 def get_claim_impact():
-    # TODO: replace with a ClaimsCore custom-toolkit call (claim status by ID)
-    # once the toolkit is wired into Arcade.
-    return "1 claim delayed — intake-validation bug; the fix is in this blocked deploy"
+    """Check claim impact via the ClaimsCore custom toolkit (real Arcade call)."""
+    # SIMPLIFICATION: claim selection is hard-coded; a real pipeline would map
+    # the affected service to its impacted claims.
+    claim = execute_tool("Claimscore.GetClaimStatus", {"claim_id": "CLM-2214"})
+    return (
+        f"Claim {claim['claim_id']} ({claim['policyholder']}): {claim['status']}"
+        if isinstance(claim, dict)
+        else str(claim)
+    )
 
 
 # --- Flow ---------------------------------------------------------------------
 
 
 def main():
-    if len(sys.argv) != 2 or not sys.argv[1].isdigit():
-        print("Usage: python agent/triage_agent.py <issue_number>")
-        sys.exit(1)
-    issue_number = int(sys.argv[1])
+    global ARCADE_USER_ID
+    parser = argparse.ArgumentParser(description="Incident-triage agent")
+    parser.add_argument("issue_number", type=int, help="GitHub issue number to triage")
+    parser.add_argument(
+        "--user",
+        default=DEFAULT_USER_ID,
+        help=f"Arcade user_id to run as (default: {DEFAULT_USER_ID})",
+    )
+    args = parser.parse_args()
+    issue_number = args.issue_number
+    ARCADE_USER_ID = args.user
     repo = {"owner": REPO_OWNER, "repo": REPO_NAME}
 
-    print(f"[1/9] Triage started for {REPO_OWNER}/{REPO_NAME}#{issue_number}")
+    print(
+        f"[1/9] Triage started for {REPO_OWNER}/{REPO_NAME}#{issue_number} "
+        f"as {ARCADE_USER_ID}"
+    )
 
     # 2. Fetch the triggering issue.
     print("[2/9] Fetching the issue via Github.GetIssue ...")
@@ -233,8 +253,8 @@ def main():
     oncall = get_oncall()
     print(f"      On call: {oncall}")
 
-    # 6. Claim-impact check (stub).
-    print("[6/9] Checking claim impact (stub — ClaimsCore toolkit pending) ...")
+    # 6. Claim-impact check via ClaimsCore.
+    print("[6/9] Checking claim impact via Claimscore.GetClaimStatus ...")
     claim_impact = get_claim_impact()
     print(f"      Impact: {claim_impact}")
 
