@@ -37,6 +37,31 @@ Prompt: what I asked (verbatim if short, essence if long) Result: what came back
 **Outcome:** worked — and the failures were the deliverable.
 
 ## [session 3b] — approvals.log ordering fix
+
 **Prompt:** Record the approval BEFORE executing (the two approved runs left zero trace — crash between writes ate the log). Per-action outcome lines; declines logged too.
 **Result:** Decision line written pre-execution; each write in its own try/except with outcome + error_kind; n now logs a decline instead of exiting traceless. Side effect accepted: writes are now independent — one failing no longer prevents the other.
 **Outcome:** compile-clean; validation on next live run.
+
+## [session 4] — user_id switch, reverted same hour
+
+**Prompt:** Replace hard-coded user_id with --user flag, default [priya@meridian-sim.com](mailto:priya@meridian-sim.com); delete stale approvals.log.
+**Result:** Clean implementation — but the persona id failed Arcade's user verification at OAuth (best error page in the product). Reverted default to the real account; kept the flag.
+**Outcome:** broke for a good reason — the flag became the mechanism for Jordan's intersection run.
+
+## [session 4] — PagerDuty isolated with a throwaway probe
+
+**Prompt:** Separate pd_test.py: call Pagerduty.Whoami, print the auth URL, wait, report final state verbatim.
+**Result:** Fable added its own diagnostics unprompted: spotted the identical state token across attempts (one stuck flow re-served), the pending status via tools.authorize, and the empty scope in the authorize URL. That analysis became the support report; the vendor confirmed the root cause within ~2h.
+**Outcome:** worked — the probe's three data points localized a bug we'd been poking blind for two days.
+
+## [session 4] — ClaimsCore built and deployed
+
+**Prompt:** Build the fictional claims system as a custom toolkit, register with Arcade, wire into step 6. Report where the docs run out.
+**Result:** Fable discovered the TDK is deprecated mid-task and switched to the current path (arcade-mcp framework + arcade deploy) without being told. Scaffolded with arcade new, unit-tested with a hand-rolled fake context (no documented harness), deployed with auto-secret-upload. Reported its guesses explicitly: name→prefix casing, Python/uv prereqs, no local test story.
+**Outcome:** worked — ~70 minutes to a deployed internal toolkit; the guess list became the H8 findings.
+
+## [session 4] — step 6 wired live
+
+**Prompt:** Replace the claim-impact stub with a real Claimscore.GetClaimStatus call; graceful fallback to stub text on error.
+**Result:** One clean edit; the next run's Slack draft carried the live record (claim id, policyholder, amount).
+**Outcome:** worked. Only the PagerDuty on-call lookup remains stubbed — by documented necessity, not choice.
