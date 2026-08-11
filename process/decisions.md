@@ -48,3 +48,6 @@ User verification requires it; persona ids can't pass. Jordan = separate Arcade 
 
 ## 2026-08-10 — TDK is deprecated; 
 ClaimsCore built on the current path (MCP server framework + arcade deploy). Canon references to "TDK" read as "custom MCP toolkit"
+
+## 2026-08-10 (evening) — UC2 complete; 
+rules probe complete (pipeline exists, rules are BYO webhooks). Declined: building a demo rule service (proves webhook-writing, not product insight) and BYO PagerDuty OAuth (finding closed, stub suffices). Two-fences dial → Tuesday AM
