@@ -33,3 +33,24 @@ Each item below is a later slice of a 90-day theme — deliberately not in the f
 ## Judgment layer
 
 **First-party detection** (catching behavior that looks wrong though no rule forbids it). Why not now: the deterministic layer is not built yet, and detection without it underperforms what specialist partners already sell. The posture for year one: open the hooks as a real product, integrate partners. Trigger: reviewed at month 12 against three tripwires — customers routing external verdicts through the hooks; per-call blocking becoming what they pay for; a partner attempting to become the control brand on top.
+
+## Appendix — 90-day theme scoring (full matrix)
+
+Scored ● yes = 2 · ◐ partly = 1 · ○ no = 0, against four questions:
+blocks enterprise deals / hurts current customers / differentiates /
+proves the vision.
+
+
+| Theme                         | Blocks deals | Hurts customers | Differentiates | Proves vision | Score |
+| ----------------------------- | ------------ | --------------- | -------------- | ------------- | ----- |
+| Approval & Rules              | ●            | ◐               | ●              | ●             | 7     |
+| Scope                         | ●            | ○               | ◐              | ●             | 5     |
+| First-connection & legibility | ◐            | ●               | ●              | ○             | 5     |
+| Receipts                      | ●            | ○               | ◐              | ◐             | 4     |
+| Packages                      | ◐            | ●               | ◐              | ○             | 4     |
+| Correctness                   | ○            | ●               | ○              | ○             | 2     |
+
+
+The ranking in the strategy document deliberately does not follow the
+scores: dependency and the competitive clock outrank them, which is why
+the highest score is not ranked first.
