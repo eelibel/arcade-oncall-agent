@@ -82,3 +82,11 @@ commands and a human approved each one; the agent masked secrets in its
 own output unprompted; and our first approval log had the same
 act-before-record flaw we later found in the platform's audit surface —
 we fixed ours the same night.
+
+**The assistant door.** Use case 2 (and the second half of use case 1)
+runs through an Arcade MCP gateway connected to Claude Desktop: create a
+gateway in the Arcade dashboard with the toolkits above, then add its
+URL in Claude Desktop as a custom connector (Settings → Connectors).
+Per-provider authorization prompts fire on first tool use. The exact
+prompts used for the runs are in
+[docs/run-scripts.md](./docs/run-scripts.md).
