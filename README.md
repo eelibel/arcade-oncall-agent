@@ -11,6 +11,8 @@ client executive (Amara) uses one for meeting preparation; a third user
 anticipated. The full scenario — company, personas, use cases, and the
 test list — is in [meridian.md](./docs/meridian.md).
 
+A recording of the setup and the pipeline run: https://drive.google.com/file/d/120ZGqK972Q7zSDXXMXo1jurQJ5g-7iA_/view?usp=drive_link
+
 ## What's here
 
 | File / folder | What it is |
